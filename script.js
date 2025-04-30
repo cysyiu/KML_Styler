@@ -27,6 +27,11 @@ let styleData = {
   polygons: []
 };
 
+// Store original KML content and document
+let originalKmlContent = '';
+let originalKmlFilename = '';
+let originalKmlDoc = null;
+
 // Convert a KML color (aabbggrr) to a standard hex color (#rrggbb).
 // This also let us extract the alpha value from the first two digits.
 function convertKmlToHex(kmlColor) {
@@ -55,6 +60,7 @@ function hexToRGBA(hex, opacity) {
 function readKmlStyles(kmlText) {
   var parser = new DOMParser();
   var xmlDoc = parser.parseFromString(kmlText, 'text/xml');
+  originalKmlDoc = xmlDoc;
   
   // Reset style data
   styleData = {
@@ -384,10 +390,10 @@ function updateStyle() {
     
     styleMap[polyStyle.id] = new ol.style.Style({
       fill: polyStyle.polyFill ? new ol.style.Fill({ color: rgbaFillColor }) : null,
-      stroke: polyStyle.polyOutline ? new ol.style.Stroke({ 
-        color: polyStyle.lineColor, 
-        width: polyStyle.lineWidth 
-      }) : null
+      stroke: polyStyle.polyOutline ? new ol.style.Stroke({
+         color: polyStyle.lineColor,
+         width: polyStyle.lineWidth
+       }) : null
     });
   });
   
@@ -418,8 +424,6 @@ function updateStyle() {
     }
   });
 }
-
-
 
 // Update styleData from form inputs
 function updateStyleDataFromForm() {
@@ -452,6 +456,23 @@ function updateStyleDataFromForm() {
     polyStyle.lineColor = document.getElementById(`polyLineColor_${index}`).value;
     polyStyle.lineWidth = parseInt(document.getElementById(`polyLineWidth_${index}`).value, 10) || 1;
   });
+}
+
+// Convert hex color to KML color format (aabbggrr)
+function colorToKmlColor(hexColor, opacity) {
+  // Remove # if present
+  hexColor = hexColor.replace('#', '');
+  
+  // Convert hex to rgb
+  const r = hexColor.substr(0, 2);
+  const g = hexColor.substr(2, 2);
+  const b = hexColor.substr(4, 2);
+  
+  // Convert opacity to hex
+  const alpha = Math.round(opacity * 255).toString(16).padStart(2, '0');
+  
+  // Return KML color format (aabbggrr)
+  return alpha + b + g + r;
 }
 
 // Convert styleData to KML style elements
@@ -524,23 +545,6 @@ function styleDataToKml() {
   return kmlStyles;
 }
 
-// Convert hex color to KML color format (aabbggrr)
-function colorToKmlColor(hexColor, opacity) {
-  // Remove # if present
-  hexColor = hexColor.replace('#', '');
-  
-  // Convert hex to rgb
-  const r = hexColor.substr(0, 2);
-  const g = hexColor.substr(2, 2);
-  const b = hexColor.substr(4, 2);
-  
-  // Convert opacity to hex
-  const alpha = Math.round(opacity * 255).toString(16).padStart(2, '0');
-  
-  // Return KML color format (aabbggrr)
-  return alpha + b + g + r;
-}
-
 // Export the updated features (with inline styles) as a KML file.
 function exportKML() {
   // Update styleData from form inputs
@@ -549,46 +553,63 @@ function exportKML() {
   // Apply styles to features
   updateStyle();
   
-  // Get features
-  var features = vectorSource.getFeatures();
+  // Create a new KML document based on the original
+  let newKmlDoc = originalKmlDoc.cloneNode(true);
   
-  // Create KML document
-  let kmlString = `<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2">
-  <Document>
-    <name>KML Export</name>
-    <description>Exported from KML Style Editor</description>
-    ${styleDataToKml()}`;
-  
-  // Add features to KML
-  const kmlFormat = new ol.format.KML();
-  const featuresKml = kmlFormat.writeFeatures(features, {
-    featureProjection: 'EPSG:3857',
-    dataProjection: 'EPSG:4326'
-  });
-  
-  // Extract just the Placemark elements from the features KML
-  const parser = new DOMParser();
-  const featuresDoc = parser.parseFromString(featuresKml, 'text/xml');
-  const placemarks = featuresDoc.getElementsByTagName('Placemark');
-  
-  for (let i = 0; i < placemarks.length; i++) {
-    const placemark = placemarks[i];
-    const placemarkXml = new XMLSerializer().serializeToString(placemark);
-    kmlString += placemarkXml;
+  // Find the Document element
+  const documentElement = newKmlDoc.getElementsByTagName('Document')[0];
+  if (!documentElement) {
+    alert('Error: Could not find Document element in KML');
+    return;
   }
   
-  // Close KML document
-  kmlString += `
-  </Document>
-</kml>`;
+  // Remove all existing Style elements (but keep StyleMap elements)
+  const styleElements = documentElement.getElementsByTagName('Style');
+  const stylesToRemove = [];
+  for (let i = 0; i < styleElements.length; i++) {
+    stylesToRemove.push(styleElements[i]);
+  }
+  
+  // Remove the collected Style elements
+  stylesToRemove.forEach(element => {
+    element.parentNode.removeChild(element);
+  });
+  
+  // Create new style elements
+  const styleFragment = new DOMParser().parseFromString(
+    `<kml xmlns="http://www.opengis.net/kml/2.2">${styleDataToKml()}</kml>`,
+    'text/xml'
+  );
+  
+  // Insert new Style elements at the beginning of the Document
+  const newStyleElements = styleFragment.getElementsByTagName('Style');
+  for (let i = newStyleElements.length - 1; i >= 0; i--) {
+    const importedNode = newKmlDoc.importNode(newStyleElements[i], true);
+    documentElement.insertBefore(importedNode, documentElement.firstChild);
+  }
+  
+  // Serialize the updated document to a string
+  const serializer = new XMLSerializer();
+  const kmlString = serializer.serializeToString(newKmlDoc);
   
   // Create a Blob and trigger a download.
   var blob = new Blob([kmlString], {type: 'application/vnd.google-earth.kml+xml'});
   var url = URL.createObjectURL(blob);
   var link = document.createElement('a');
   link.href = url;
-  link.download = 'updated_features.kml';
+  
+  // Use original filename with _newStyle suffix
+  let exportFilename = originalKmlFilename;
+  if (!exportFilename || exportFilename === '') {
+    exportFilename = 'exported';
+  }
+  
+  // Remove .kml extension if present
+  if (exportFilename.toLowerCase().endsWith('.kml')) {
+    exportFilename = exportFilename.slice(0, -4);
+  }
+  
+  link.download = exportFilename + '_newStyle.kml';
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -599,9 +620,15 @@ function exportKML() {
 document.getElementById('kmlFileInput').addEventListener('change', function(event) {
   var file = event.target.files[0];
   if (file) {
+    // Store original filename
+    originalKmlFilename = file.name;
+    
     var reader = new FileReader();
     reader.onload = function(e) {
       var kmlText = e.target.result;
+      
+      // Store original KML content
+      originalKmlContent = kmlText;
       
       // Populate the control panel with styles from the imported KML.
       readKmlStyles(kmlText);
@@ -625,5 +652,15 @@ document.getElementById('kmlFileInput').addEventListener('change', function(even
     };
     reader.readAsText(file);
   }
+});
+
+// Apply style changes button
+document.getElementById('applyStyleBtn').addEventListener('click', function() {
+  updateStyle();
+});
+
+// Export KML button
+document.getElementById('exportKmlBtn').addEventListener('click', function() {
+  exportKML();
 });
 
