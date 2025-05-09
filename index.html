@@ -2,17 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>KML Style Editor with OpenLayers & KML Default Styles</title>
+  <title>KML Styler</title>
   <!-- OpenLayers CSS -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@6.15.1/ol.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <h1>KML Style Editor with OpenLayers</h1>
+  <h1>KML Styler</h1>
   <p>
+	This tool is for bridging the Google Earth KML with other GIS software. <br>
     Import a KML file to visualize it on the map. If the KML contains inline styling (stored in elements such as 
     &lt;IconStyle&gt;, &lt;LineStyle&gt; or &lt;PolyStyle&gt;), the control panel is automatically populated with those values.
-    You may adjust the style parameters below to dynamically change the feature styles.
+    Click "Simplify Styles" to remove the sepeartion of &lt;styleID&gt;-normal and &lt;styleID&gt;-highlight. You may adjust the style parameters below to dynamically change the feature styles and styleID.
     When finished, click "Export KML" to output a KML file that contains the updated styles.
   </p>
   
@@ -29,6 +30,10 @@
     <!-- Style Panel -->
     <div id="stylePanel">
       <h2>Style Editor</h2>
+		<div class="button-container">
+        <!-- <button type="button" onclick="updateStyle()">Update Style</button> -->
+        <button type="button" onclick="simplifyKmlStyles()">Simplify Styles</button>
+      </div>
       <div id="styleControls">
         <!-- Dynamic style controls will be inserted here -->
         <p class="no-styles">Import a KML file to edit styles</p>
@@ -40,7 +45,9 @@
       </div>
     </div>
   </div>
-
+	<div>
+	<p> <a href="https://kml4earth.appspot.com/icons.html#shapes" target="_blank">More Icons</a></p>
+	</div>
   <!-- Include OpenLayers library BEFORE our custom script -->
   <script src="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.js"></script>
   <script src="script.js"></script>
