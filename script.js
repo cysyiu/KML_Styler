@@ -256,7 +256,7 @@ function readKmlStyles(kmlText) {
   generateStyleControls();
 }
 
-// Generate style control panels based on the styleData
+// Modify the generateStyleControls function to add ID editing
 function generateStyleControls() {
   const styleControls = document.getElementById('styleControls');
   styleControls.innerHTML = '';
@@ -274,7 +274,11 @@ function generateStyleControls() {
     styleData.points.forEach((pointStyle, index) => {
       const pointStyleHtml = `
         <div class="style-section point-style-section">
-          <h3>Point Style ID: ${pointStyle.id}</h3>
+          <div class="form-group style-id-group">
+            <label for="pointStyleId_${index}">Style ID:</label>
+            <input type="text" id="pointStyleId_${index}" value="${pointStyle.id}" data-original-id="${pointStyle.id}" class="style-id-input">
+            <button type="button" class="update-id-btn" onclick="updateStyleIdFromInput('point', ${index})">Update ID</button>
+          </div>
           <div class="form-group">
             <label for="iconUrl_${index}">Icon URL:</label>
             <input type="text" id="iconUrl_${index}" value="${pointStyle.iconUrl}" placeholder="URL to icon image">
@@ -316,7 +320,11 @@ function generateStyleControls() {
     styleData.lines.forEach((lineStyle, index) => {
       const lineStyleHtml = `
         <div class="style-section line-style-section">
-          <h3>Line Style ID: ${lineStyle.id}</h3>
+          <div class="form-group style-id-group">
+            <label for="lineStyleId_${index}">Style ID:</label>
+            <input type="text" id="lineStyleId_${index}" value="${lineStyle.id}" data-original-id="${lineStyle.id}" class="style-id-input">
+            <button type="button" class="update-id-btn" onclick="updateStyleIdFromInput('line', ${index})">Update ID</button>
+          </div>
           <div class="form-group">
             <label for="lineColor_${index}">Line Color:</label>
             <input type="color" id="lineColor_${index}" value="${lineStyle.lineColor}">
@@ -344,7 +352,11 @@ function generateStyleControls() {
     styleData.polygons.forEach((polyStyle, index) => {
       const polyStyleHtml = `
         <div class="style-section polygon-style-section">
-          <h3>Polygon Style ID: ${polyStyle.id}</h3>
+          <div class="form-group style-id-group">
+            <label for="polyStyleId_${index}">Style ID:</label>
+            <input type="text" id="polyStyleId_${index}" value="${polyStyle.id}" data-original-id="${polyStyle.id}" class="style-id-input">
+            <button type="button" class="update-id-btn" onclick="updateStyleIdFromInput('polygon', ${index})">Update ID</button>
+          </div>
           <div class="form-group">
             <label for="fillColor_${index}">Fill Color:</label>
             <input type="color" id="fillColor_${index}" value="${polyStyle.fillColor}">
@@ -391,7 +403,11 @@ function generateStyleControls() {
     for (const styleMapId in styleMapData) {
       let styleMapHtml = `
         <div class="style-section style-map-section">
-          <h3>StyleMap ID: ${styleMapId}</h3>
+          <div class="form-group style-id-group">
+            <label for="styleMapId_${styleMapId}">StyleMap ID:</label>
+            <input type="text" id="styleMapId_${styleMapId}" value="${styleMapId}" data-original-id="${styleMapId}" class="style-id-input">
+            <button type="button" class="update-id-btn" onclick="updateStyleMapIdFromInput('${styleMapId}')">Update ID</button>
+          </div>
           <table class="style-map-table">
             <tr><th>Key</th><th>Style ID</th></tr>
       `;
@@ -409,6 +425,7 @@ function generateStyleControls() {
     }
   }
 }
+
 
 // Toggle label controls visibility
 function toggleLabelControls(index) {
@@ -880,7 +897,256 @@ function setupRealTimeUpdates() {
   });
 }
 
-// Call this after the page loads
+// Add a function to update style IDs in the KML document
+function updateStyleIds(oldId, newId) {
+  if (!originalKmlDoc || oldId === newId) return;
+  
+  // Update styleUrl references in Placemark elements
+  const placemarks = originalKmlDoc.getElementsByTagName('Placemark');
+  for (let i = 0; i < placemarks.length; i++) {
+    const styleUrlElements = placemarks[i].getElementsByTagName('styleUrl');
+    for (let j = 0; j < styleUrlElements.length; j++) {
+      const styleUrl = styleUrlElements[j].textContent;
+      if (styleUrl === '#' + oldId) {
+        styleUrlElements[j].textContent = '#' + newId;
+      }
+    }
+  }
+  
+  // Update Style element IDs
+  const styleElements = originalKmlDoc.getElementsByTagName('Style');
+  for (let i = 0; i < styleElements.length; i++) {
+    if (styleElements[i].getAttribute('id') === oldId) {
+      styleElements[i].setAttribute('id', newId);
+    }
+  }
+  
+  // Update StyleMap references
+  for (const styleMapId in styleMapData) {
+    for (const key in styleMapData[styleMapId]) {
+      if (styleMapData[styleMapId][key] === oldId) {
+        styleMapData[styleMapId][key] = newId;
+      }
+    }
+  }
+  
+  // Update StyleMap IDs if needed
+  const styleMapElements = originalKmlDoc.getElementsByTagName('StyleMap');
+  for (let i = 0; i < styleMapElements.length; i++) {
+    if (styleMapElements[i].getAttribute('id') === oldId) {
+      styleMapElements[i].setAttribute('id', newId);
+      
+      // Update the styleMapData object
+      if (styleMapData[oldId]) {
+        styleMapData[newId] = {...styleMapData[oldId]};
+        delete styleMapData[oldId];
+      }
+    }
+  }
+}
+
+// Function to update style ID from input field
+function updateStyleIdFromInput(styleType, index) {
+  let inputElement, originalId, newId;
+  
+  switch(styleType) {
+    case 'point':
+      inputElement = document.getElementById(`pointStyleId_${index}`);
+      originalId = styleData.points[index].id;
+      newId = inputElement.value.trim();
+      
+      if (newId && newId !== originalId) {
+        styleData.points[index].id = newId;
+        updateStyleIds(originalId, newId);
+        inputElement.dataset.originalId = newId;
+        updateStyle();
+      }
+      break;
+      
+    case 'line':
+      inputElement = document.getElementById(`lineStyleId_${index}`);
+      originalId = styleData.lines[index].id;
+      newId = inputElement.value.trim();
+      
+      if (newId && newId !== originalId) {
+        styleData.lines[index].id = newId;
+        updateStyleIds(originalId, newId);
+        inputElement.dataset.originalId = newId;
+        updateStyle();
+      }
+      break;
+      
+    case 'polygon':
+      inputElement = document.getElementById(`polyStyleId_${index}`);
+      originalId = styleData.polygons[index].id;
+      newId = inputElement.value.trim();
+      
+      if (newId && newId !== originalId) {
+        styleData.polygons[index].id = newId;
+        updateStyleIds(originalId, newId);
+        inputElement.dataset.originalId = newId;
+        updateStyle();
+      }
+      break;
+  }
+}
+
+// Function to update StyleMap ID
+function updateStyleMapIdFromInput(originalStyleMapId) {
+  const inputElement = document.getElementById(`styleMapId_${originalStyleMapId}`);
+  const newStyleMapId = inputElement.value.trim();
+  
+  if (newStyleMapId && newStyleMapId !== originalStyleMapId) {
+    // Update the styleMapData object
+    styleMapData[newStyleMapId] = {...styleMapData[originalStyleMapId]};
+    delete styleMapData[originalStyleMapId];
+    
+    // Update references in the KML document
+    updateStyleIds(originalStyleMapId, newStyleMapId);
+    
+    // Regenerate the style controls to reflect the changes
+    generateStyleControls();
+  }
+}
+
+
+// Function to simplify KML styles by removing highlight styles and simplifying StyleMaps
+function simplifyKmlStyles() {
+  if (!originalKmlDoc) {
+    alert('Please import a KML file first');
+    return;
+  }
+
+  // Track style changes for updating references
+  const styleIdChanges = {};
+
+  // Process StyleMap elements to identify normal/highlight pairs
+  const styleMapElements = originalKmlDoc.getElementsByTagName('StyleMap');
+  const styleMapsToRemove = [];
+
+  for (let i = 0; i < styleMapElements.length; i++) {
+    const styleMapElement = styleMapElements[i];
+    const styleMapId = styleMapElement.getAttribute('id');
+    
+    if (!styleMapId) continue;
+    
+    let normalStyleId = null;
+    
+    // Find the 'normal' style reference
+    const pairElements = styleMapElement.getElementsByTagName('Pair');
+    for (let j = 0; j < pairElements.length; j++) {
+      const pairElement = pairElements[j];
+      const keyElement = pairElement.getElementsByTagName('key')[0];
+      const styleUrlElement = pairElement.getElementsByTagName('styleUrl')[0];
+      
+      if (keyElement && styleUrlElement && keyElement.textContent.trim() === 'normal') {
+        let styleUrl = styleUrlElement.textContent.trim();
+        
+        // Remove # from styleUrl if present
+        if (styleUrl.startsWith('#')) {
+          styleUrl = styleUrl.substring(1);
+        }
+        
+        normalStyleId = styleUrl;
+        break;
+      }
+    }
+    
+    if (normalStyleId) {
+      // Mark this StyleMap for removal
+      styleMapsToRemove.push(styleMapElement);
+      
+      // Record the mapping from StyleMap ID to normal style ID
+      styleIdChanges[styleMapId] = normalStyleId;
+      
+      // If the normal style ID ends with '-normal', we'll rename it
+      if (normalStyleId.endsWith('-normal')) {
+        const baseStyleId = normalStyleId.substring(0, normalStyleId.length - 7);
+        styleIdChanges[normalStyleId] = baseStyleId;
+      }
+    }
+  }
+
+  // Remove highlight styles
+  const styleElements = originalKmlDoc.getElementsByTagName('Style');
+  const stylesToRemove = [];
+
+  for (let i = 0; i < styleElements.length; i++) {
+    const styleElement = styleElements[i];
+    const styleId = styleElement.getAttribute('id');
+    
+    if (styleId && styleId.endsWith('-highlight')) {
+      stylesToRemove.push(styleElement);
+    } else if (styleId && styleId.endsWith('-normal')) {
+      // Rename -normal styles to their base name
+      const baseStyleId = styleId.substring(0, styleId.length - 7);
+      styleElement.setAttribute('id', baseStyleId);
+      styleIdChanges[styleId] = baseStyleId;
+    }
+  }
+
+  // Remove the collected Style elements
+  stylesToRemove.forEach(element => {
+    if (element.parentNode) {
+      element.parentNode.removeChild(element);
+    }
+  });
+
+  // Remove the collected StyleMap elements
+  styleMapsToRemove.forEach(element => {
+    if (element.parentNode) {
+      element.parentNode.removeChild(element);
+    }
+  });
+
+
+  // Update our styleMapData object
+  const updatedStyleMapData = {};
+  for (const styleMapId in styleMapData) {
+    if (styleIdChanges[styleMapId]) {
+      // This StyleMap has been removed, skip it
+      continue;
+    }
+    
+    updatedStyleMapData[styleMapId] = {};
+    for (const key in styleMapData[styleMapId]) {
+      const styleId = styleMapData[styleMapId][key];
+      updatedStyleMapData[styleMapId][key] = styleIdChanges[styleId] || styleId;
+    }
+  }
+  styleMapData = updatedStyleMapData;
+
+  // Re-parse the KML to update our data structures
+  const serializer = new XMLSerializer();
+  const kmlString = serializer.serializeToString(originalKmlDoc);
+
+  // Clear existing features
+  vectorSource.clear();
+
+  // Re-parse the KML
+  readKmlStyles(kmlString);
+
+  // Parse the features from the KML text with inline styles
+  const features = new ol.format.KML({
+    extractStyles: true
+  }).readFeatures(kmlString, {
+    featureProjection: 'EPSG:3857'
+  });
+
+  // Add the features to the map
+  vectorSource.addFeatures(features);
+
+  // Update the UI
+  generateStyleControls();
+
+  // Show success message
+  alert('KML styles simplified successfully. Highlight styles have been removed and normal styles renamed.');
+}
+
+
+
+
+// Initialize the page
 document.addEventListener('DOMContentLoaded', function() {
   setupRealTimeUpdates();
 });
